@@ -124,7 +124,7 @@ export const FLOATING_EMOJIS = ['💖', '🌙', '💕', '✨', '💗', '🌙', '
 export const RISING_HEARTS = ['❤️', '💖', '💕', '💗', '💞', '✨'];
 
 /**
- * Música de fundo (Lisboa), em loop. Com src: null toca uma melodia calma gerada no navegador.
+ * Música de fundo (Lisboa), em loop. O arquivo já vem gravado baixinho (iPhone ignora o volume), por isso volume: 1. Com src: null toca uma melodia calma gerada no navegador.
  * O script de build embute esta música no arquivo único (veja o README).
  */
-export const MUSIC = { src: 'assets/musica/lisboa.m4a', volume: 0.6 };
+export const MUSIC = { src: 'assets/musica/lisboa.m4a', volume: 1 };
