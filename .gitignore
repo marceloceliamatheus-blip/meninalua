@@ -1,0 +1,15 @@
+# arquivo único gerado pelo script de build
+dist/
+
+# músicas não vão para o repositório (direitos autorais)
+*.mp3
+*.m4a
+*.wav
+*.aac
+
+# sistema / editores
+.DS_Store
+Thumbs.db
+__pycache__/
+.vscode/
+.idea/
