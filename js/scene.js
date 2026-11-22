@@ -15,7 +15,8 @@ const CAMERA_DISTANCE = 22;
 const HEART_HEIGHT = 5.6;
 const PHOTO_RADIUS = 0.98;
 const AUTO_SPIN = 0.07; // rad/s
-const PITCH_LIMITS = [0.02, 1.25];
+const DRAG_SPEED = 0.009; // rad por pixel arrastado
+const MAX_SPIN_SPEED = 6; // rad/s, limite do impulso ao soltar
 const ZOOM_LIMITS = [0.55, 4.5];
 const DOUBLE_TAP_ZOOM = 3.6;
 const BACKGROUND = '#05010d';
@@ -226,6 +227,7 @@ export class Universe {
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     const portrait = this.height > this.width;
+    this.centerY = this.height * (portrait ? 0.5 : 0.53);
     this.baseFocal = CAMERA_DISTANCE * (portrait
       ? Math.min(this.width * 0.5 / 6.4, this.height * 0.5 / 7.5)
       : Math.min(this.width * 0.5 / 8.8, this.height * 0.5 / 6.4));
@@ -239,6 +241,7 @@ export class Universe {
     let press = null;
     let lastMoveAt = 0;
     let lastEmptyTapAt = 0;
+    let horizontalSign = 1;
     const cam = this.camera;
 
     const distanceBetween = ([a, b]) => Math.hypot(a.x - b.x, a.y - b.y);
@@ -251,6 +254,13 @@ export class Universe {
         press = { x: e.clientX, y: e.clientY, at: performance.now(), moved: false };
         cam.spinVelocity = 0;
         cam.pitchVelocity = 0;
+        lastMoveAt = performance.now();
+        // "pegar" o universo: o que está debaixo do dedo vai para o mesmo lado do dedo.
+        // Abaixo do centro fica o lado da frente da órbita; acima, o de trás (que gira ao contrário).
+        // Se a câmera estiver de cabeça para baixo, os lados se invertem.
+        const fingerBelowCenter = e.clientY >= this.centerY;
+        const lookingFromAbove = Math.sin(cam.pitch) >= 0;
+        horizontalSign = fingerBelowCenter === lookingFromAbove ? 1 : -1;
       } else if (pointers.size === 2) {
         pinchStart = { distance: distanceBetween([...pointers.values()]), zoom: cam.zoom };
         if (press) press.moved = true;
@@ -267,12 +277,16 @@ export class Universe {
 
       if (pointers.size === 1) {
         if (press && Math.hypot(e.clientX - press.x, e.clientY - press.y) > 8) press.moved = true;
-        // gira junto com o dedo: arrastar para a direita leva a frente para a direita
-        cam.yaw += dx * 0.006;
-        cam.pitch = clamp(cam.pitch + dy * 0.004, ...PITCH_LIMITS);
-        cam.spinVelocity = dx * 0.36;
-        cam.pitchVelocity = dy * 0.24;
-        lastMoveAt = performance.now();
+        const now = performance.now();
+        const seconds = Math.max((now - lastMoveAt) / 1000, 1 / 240);
+        lastMoveAt = now;
+        const yawStep = dx * DRAG_SPEED * horizontalSign;
+        const pitchStep = dy * DRAG_SPEED;
+        cam.yaw += yawStep;
+        cam.pitch += pitchStep; // gira 360° para cima e para baixo
+        // velocidade medida pelo tempo real entre eventos (igual em telas de 60 Hz e 120 Hz)
+        cam.spinVelocity = clamp(cam.spinVelocity * 0.5 + (yawStep / seconds) * 0.5, -MAX_SPIN_SPEED, MAX_SPIN_SPEED);
+        cam.pitchVelocity = clamp(cam.pitchVelocity * 0.5 + (pitchStep / seconds) * 0.5, -MAX_SPIN_SPEED, MAX_SPIN_SPEED);
       } else if (pointers.size === 2 && pinchStart) {
         cam.zoom = clamp(pinchStart.zoom * distanceBetween([...pointers.values()]) / pinchStart.distance, ...ZOOM_LIMITS);
         cam.targetZoom = null;
@@ -328,8 +342,10 @@ export class Universe {
     }
     if (this.activePointers.size > 0) return; // enquanto o dedo está na tela, quem gira é ela
     cam.yaw += (AUTO_SPIN + cam.spinVelocity) * dt;
-    cam.pitch = clamp(cam.pitch + cam.pitchVelocity * dt, ...PITCH_LIMITS);
-    const friction = 0.08 ** dt; // inércia depois de soltar o dedo
+    cam.pitch += cam.pitchVelocity * dt;
+    cam.yaw = Math.atan2(Math.sin(cam.yaw), Math.cos(cam.yaw)); // mantém os ângulos entre -π e π
+    cam.pitch = Math.atan2(Math.sin(cam.pitch), Math.cos(cam.pitch));
+    const friction = 0.04 ** dt; // inércia depois de soltar o dedo (para em ~1 s)
     cam.spinVelocity *= friction;
     cam.pitchVelocity *= friction;
   }
@@ -348,7 +364,7 @@ export class Universe {
     const view = {
       focal: this.baseFocal * cam.zoom,
       cx: this.width / 2,
-      cy: this.height * (this.height > this.width ? 0.5 : 0.53),
+      cy: this.centerY,
       cosYaw: Math.cos(cam.yaw), sinYaw: Math.sin(cam.yaw),
       cosPitch: Math.cos(cam.pitch), sinPitch: Math.sin(cam.pitch),
     };
@@ -588,8 +604,9 @@ export class Universe {
     const cosSway = Math.cos(sway);
     const sinSway = Math.sin(sway);
     // o coração fica sempre de frente, só um pouco inclinado com a câmera
-    const cosTilt = Math.cos(this.camera.pitch * 0.15);
-    const sinTilt = Math.sin(this.camera.pitch * 0.15);
+    const tilt = 0.15 * Math.sin(this.camera.pitch);
+    const cosTilt = Math.cos(tilt);
+    const sinTilt = Math.sin(tilt);
     const { cos: gCos, sin: gSin } = this.galaxyAngles(view);
     const { cx, cy, focal } = view;
     const pixelsPerUnit = focal / CAMERA_DISTANCE;
