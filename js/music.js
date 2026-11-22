@@ -1,7 +1,9 @@
 /**
  * Música de fundo baixinha, em loop, com botão de pausar.
- * O volume passa por um GainNode do Web Audio porque o iPhone ignora
- * `audio.volume`. Sem arquivo de música, toca uma melodia calma gerada aqui.
+ * A música (arquivo) toca num <audio> comum, sem passar pelo Web Audio: assim o
+ * iPhone toca mesmo com a chave do silencioso ligada. O iPhone ignora
+ * `audio.volume`, por isso o arquivo já vem gravado mais baixo.
+ * Sem arquivo de música, toca uma melodia calma gerada aqui (Web Audio).
  */
 
 const AudioContextClass = window.AudioContext || window.webkitAudioContext;
@@ -27,6 +29,7 @@ export class BackgroundMusic {
     this.playing = false;
     this.chordIndex = 0;
     this.chordTimer = null;
+    this.fadeTimer = null;
   }
 
   /** Precisa ser chamado dentro de um toque (regra dos navegadores). */
@@ -42,6 +45,10 @@ export class BackgroundMusic {
   }
 
   toggle() {
+    if (!this.context && !this.audio) { // ainda não começou: o botão também dá a partida
+      this.start();
+      return this.playing;
+    }
     this.setPlaying(!this.playing);
     return this.playing;
   }
@@ -49,23 +56,27 @@ export class BackgroundMusic {
   setPlaying(on) {
     if (!this.context && !this.audio) return;
     this.playing = on;
-    if (!this.master) { // navegador sem Web Audio
-      if (on) this.audio.play(); else this.audio.pause();
+    if (this.audio) {
+      if (on) {
+        this.audio.play()?.catch((error) => console.warn('Áudio bloqueado:', error));
+        this.fadeTo(this.volume, 1.5);
+      } else {
+        this.fadeTo(0, 0.8, () => { if (!this.playing) this.audio.pause(); });
+      }
       return;
     }
+    if (!this.master) return; // navegador sem Web Audio
     const now = this.context.currentTime;
     const gain = this.master.gain;
     gain.cancelScheduledValues(now);
     gain.setValueAtTime(gain.value, now);
     if (on) {
       this.context.resume();
-      this.audio?.play();
       gain.linearRampToValueAtTime(this.volume, now + 1.5);
     } else {
       gain.linearRampToValueAtTime(0, now + 0.8);
       setTimeout(() => {
         if (this.playing) return;
-        this.audio?.pause();
         this.context.suspend();
       }, 900);
     }
@@ -73,9 +84,8 @@ export class BackgroundMusic {
 
   /** Estado legível (usado nos testes). */
   get state() {
-    const ctx = this.context ? this.context.state : 'sem-webaudio';
-    if (!this.audio) return ctx;
-    return `${ctx}/${this.audio.paused ? 'pausado' : 'tocando'} t=${this.audio.currentTime.toFixed(1)} loop=${this.audio.loop}`;
+    if (!this.audio) return this.context ? this.context.state : 'parado';
+    return `audio/${this.audio.paused ? 'pausado' : 'tocando'} t=${this.audio.currentTime.toFixed(1)} vol=${this.audio.volume.toFixed(2)} loop=${this.audio.loop}`;
   }
 
   createMaster() {
@@ -90,14 +100,29 @@ export class BackgroundMusic {
     this.audio.loop = true;
     this.audio.preload = 'auto';
     this.audio.setAttribute('playsinline', '');
-    if (AudioContextClass) {
-      this.context = new AudioContextClass();
-      this.createMaster();
-      this.context.createMediaElementSource(this.audio).connect(this.master);
-    } else {
-      this.audio.volume = this.volume;
-    }
-    this.audio.play()?.catch((error) => console.warn('Áudio bloqueado:', error));
+    this.audio.volume = 0; // no iPhone não tem efeito: lá toca no volume do arquivo
+    this.audio.play()?.catch((error) => {
+      console.warn('Áudio bloqueado:', error);
+      this.playing = false;
+    });
+    this.fadeTo(this.volume, FADE_IN_SECONDS);
+  }
+
+  /** Muda o volume do <audio> aos poucos (onde o navegador deixa). */
+  fadeTo(target, seconds, done) {
+    clearInterval(this.fadeTimer);
+    const audio = this.audio;
+    const from = audio.volume;
+    const steps = Math.max(1, Math.round(seconds * 20));
+    let step = 0;
+    this.fadeTimer = setInterval(() => {
+      step += 1;
+      audio.volume = Math.min(1, Math.max(0, from + ((target - from) * step) / steps));
+      if (step >= steps) {
+        clearInterval(this.fadeTimer);
+        done?.();
+      }
+    }, 50);
   }
 
   startSynth() {

@@ -23,7 +23,7 @@ MODULES = ['config', 'utils', 'sprites', 'heart', 'scene', 'music', 'ui', 'main'
 IMPORT_RE = re.compile(r"^import\s[\s\S]*?from\s+'[^']+';[ \t]*\n", re.MULTILINE)
 EXPORT_RE = re.compile(r'^export\s+', re.MULTILINE)
 PHOTO_RE = re.compile(r"'(assets/fotos/[^']+)'")
-MUSIC_RE = re.compile(r'MUSIC = \{ src: null,')
+MUSIC_RE = re.compile(r"MUSIC = \{ src: (?:null|'([^']*)'),")
 
 
 def data_uri(path: Path) -> str:
@@ -49,6 +49,11 @@ def bundle_javascript(music_path: Path | None) -> str:
         return f"'{data_uri(photo)}'"
 
     code = PHOTO_RE.sub(inline_photo, code)
+
+    if not music_path:  # sem --musica: usa a música configurada em config.js, se houver
+        configured = MUSIC_RE.search(code)
+        if configured and configured.group(1):
+            music_path = ROOT / configured.group(1)
 
     if music_path:
         if not music_path.exists():
