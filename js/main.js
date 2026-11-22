@@ -44,5 +44,7 @@ if (DEBUG) {
     get thumbsReady() { return universe.planets.filter((p) => p.thumb).length; },
     get meteors() { return universe.meteors.length; },
     get music() { return music.state; },
+    get camera() { return { ...universe.camera }; },
+    get frontPhotoX() { return universe.hitAreas[0]?.x; },
   };
 }

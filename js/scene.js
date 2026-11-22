@@ -267,9 +267,10 @@ export class Universe {
 
       if (pointers.size === 1) {
         if (press && Math.hypot(e.clientX - press.x, e.clientY - press.y) > 8) press.moved = true;
-        cam.yaw -= dx * 0.006;
+        // gira junto com o dedo: arrastar para a direita leva a frente para a direita
+        cam.yaw += dx * 0.006;
         cam.pitch = clamp(cam.pitch + dy * 0.004, ...PITCH_LIMITS);
-        cam.spinVelocity = -dx * 0.36;
+        cam.spinVelocity = dx * 0.36;
         cam.pitchVelocity = dy * 0.24;
         lastMoveAt = performance.now();
       } else if (pointers.size === 2 && pinchStart) {
